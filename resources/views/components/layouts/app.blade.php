@@ -73,15 +73,19 @@
         <div
             class="h-18 px-5 flex items-center justify-between border-b border-slate-200 bg-slate-50 dark:border-slate-800/80 dark:bg-slate-950/40">
             <a href="{{ route('dashboard') }}" class="flex items-center gap-3 overflow-hidden group">
-                <div
-                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-md shadow-teal-500/20 shrink-0">
-                    <x-icon name="graduation-cap" class="w-6 h-6" />
+                <div class="w-10 h-10 flex items-center justify-center shrink-0">
+                    <img src="{{ asset('images/icon-192.png') }}" alt="Logo SMK Tri Sukses Natar"
+                        class="w-full h-full object-contain" />
                 </div>
+
                 <div x-show="!sidebarCollapsed" class="transition-opacity duration-200">
                     <h1
                         class="text-sm font-bold text-slate-900 dark:text-white tracking-tight leading-tight group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
-                        SMK TRI SUKSES</h1>
-                    <p class="text-[11px] font-medium text-teal-400 tracking-wider">NATAR LAMPUNG</p>
+                        SMK TRI SUKSES
+                    </h1>
+                    <p class="text-[11px] font-medium text-teal-400 tracking-wider">
+                        NATAR LAMPUNG
+                    </p>
                 </div>
             </a>
             <button type="button" x-on:click="sidebarCollapsed = !sidebarCollapsed"
