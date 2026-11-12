@@ -5,7 +5,6 @@ namespace App\Imports;
 use App\Enums\StudentStatus;
 use App\Models\SchoolClass;
 use App\Models\Student;
-use App\Services\QRCodeService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -22,15 +21,16 @@ class StudentsImport implements ToCollection, WithHeadingRow
 
     public array $errors = [];
 
-    public function __construct(
-        protected QRCodeService $qrCodeService
-    ) {}
-
+    /**
+     * Import students from Excel collection.
+     */
     public function collection(Collection $rows): void
     {
         foreach ($rows as $index => $row) {
             // Baris pertama adalah heading.
             $rowNumber = $index + 2;
+
+            $nis = '-';
 
             try {
                 // Pastikan data berbentuk Collection.
@@ -76,7 +76,8 @@ class StudentsImport implements ToCollection, WithHeadingRow
                     $this->addError(
                         $rowNumber,
                         $nis,
-                        'NIS sudah terdaftar. Data dilewati.'
+                        'NIS sudah terdaftar. Data dilewati.',
+                        countAsFailed: false
                     );
 
                     continue;
@@ -107,16 +108,18 @@ class StudentsImport implements ToCollection, WithHeadingRow
 
                 $schoolClass = $classes->first();
 
-                // Simpan siswa dan QR Code dalam satu transaksi.
-                DB::transaction(function () use ($schoolClass, $nis, $name) {
-                    $student = Student::create([
+                // Simpan siswa dalam transaksi.
+                DB::transaction(function () use (
+                    $schoolClass,
+                    $nis,
+                    $name
+                ) {
+                    Student::create([
                         'school_class_id' => $schoolClass->id,
                         'nis' => $nis,
                         'name' => $name,
                         'status' => StudentStatus::ACTIVE->value,
                     ]);
-
-                    $this->qrCodeService->generateForStudent($student);
                 });
 
                 $this->success++;
@@ -124,6 +127,7 @@ class StudentsImport implements ToCollection, WithHeadingRow
             } catch (\Throwable $e) {
                 Log::error('Import siswa gagal.', [
                     'row' => $rowNumber,
+                    'nis' => $nis,
                     'error' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
@@ -131,19 +135,25 @@ class StudentsImport implements ToCollection, WithHeadingRow
 
                 $this->addError(
                     $rowNumber,
-                    $nis ?? '-',
+                    $nis,
                     $e->getMessage()
                 );
             }
         }
     }
 
+    /**
+     * Add import error.
+     */
     private function addError(
         int $row,
         string $nis,
-        string $message
+        string $message,
+        bool $countAsFailed = true
     ): void {
-        $this->failed++;
+        if ($countAsFailed) {
+            $this->failed++;
+        }
 
         $this->errors[] = [
             'row' => $row,
@@ -152,6 +162,9 @@ class StudentsImport implements ToCollection, WithHeadingRow
         ];
     }
 
+    /**
+     * Get import result.
+     */
     public function result(): array
     {
         return [

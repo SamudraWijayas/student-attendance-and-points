@@ -31,7 +31,7 @@ class StudentController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = Student::with(['schoolClass.major', 'qrCode']);
+        $query = Student::with(['schoolClass.major']);
 
         if ($request->filled('class_id')) {
             $query->where('school_class_id', $request->class_id);
@@ -185,7 +185,6 @@ class StudentController extends Controller
 
         $student = Student::create($validated);
 
-        $this->qrCodeService->generateForStudent($student);
 
         AuditLog::log(
             action: 'CREATE_STUDENT',
@@ -212,7 +211,6 @@ class StudentController extends Controller
     {
         $student->load([
             'schoolClass.major',
-            'qrCode',
             'attendances' => fn ($q) =>
                 $q->latest('attendance_date')->take(20),
             'pointTransactions' => fn ($q) =>
@@ -248,9 +246,10 @@ class StudentController extends Controller
             ? round(($hadirCount / $totalAttendance) * 100, 1)
             : 0;
 
-        $qrSvg = $student->qrCode
-            ? $this->qrCodeService->getSvg($student->qrCode->token, 200)
-            : null;
+        $qrSvg = $this->qrCodeService->getSvg(
+            $student->nis,
+            200
+        );
 
         $school = SchoolSetting::current();
 
@@ -420,37 +419,26 @@ class StudentController extends Controller
     }
 
     /**
-     * Regenerate QR Code.
+     * Refresh student QR Code.
      */
     public function regenerateQr(Student $student): RedirectResponse
     {
-        $this->qrCodeService->generateForStudent(
-            $student,
-            forceRegenerate: true
-        );
-
-        AuditLog::log(
-            action: 'REGENERATE_QR',
-            module: 'students',
-            recordId: $student->id
-        );
-
         return back()->with(
             'success',
-            'QR Code siswa berhasil diregenerasi. Kode lama telah dinonaktifkan.'
+            "QR Code siswa {$student->name} otomatis mengikuti NIS terbaru: {$student->nis}."
         );
     }
-
     /**
      * Print single student card.
      */
     public function printCard(Student $student): View
     {
-        $student->load(['schoolClass.major', 'qrCode']);
+        $student->load(['schoolClass.major']);
 
-        $qrSvg = $student->qrCode
-            ? $this->qrCodeService->getSvg($student->qrCode->token, 200)
-            : null;
+        $qrSvg = $this->qrCodeService->getSvg(
+            $student->nis,
+            200
+        );
 
         $school = SchoolSetting::current();
 
@@ -468,7 +456,6 @@ class StudentController extends Controller
     {
         $students = $schoolClass->students()
             ->where('status', StudentStatus::ACTIVE)
-            ->with('qrCode')
             ->get();
 
         $school = SchoolSetting::current();
@@ -476,12 +463,10 @@ class StudentController extends Controller
         $cardsData = $students->map(function ($student) {
             return [
                 'student' => $student,
-                'qrSvg' => $student->qrCode
-                    ? $this->qrCodeService->getSvg(
-                        $student->qrCode->token,
-                        180
-                    )
-                    : null,
+                'qrSvg' => $this->qrCodeService->getSvg(
+                    $student->nis,
+                    180
+                ),
             ];
         });
 
@@ -534,9 +519,7 @@ class StudentController extends Controller
             ]);
 
             try {
-                $studentsImport = new StudentsImport(
-                    $this->qrCodeService
-                );
+                $studentsImport = new StudentsImport();
 
                 Excel::import(
                     $studentsImport,
